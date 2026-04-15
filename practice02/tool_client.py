@@ -2,11 +2,11 @@ import os
 import json
 import time
 import sys
-import re
 from http.client import HTTPSConnection, HTTPConnection
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse
 
 # ====================== 核心配置：固定文件操作目录为practice03 ======================
+# 自动获取当前脚本所在目录（practice03），保证文件创建在这里
 BASE_WORK_DIR = os.path.dirname(os.path.abspath(__file__))
 print(f"[系统] 文件操作目录：{BASE_WORK_DIR}")
 
@@ -83,8 +83,9 @@ def stream_llm_response(base_url, model, api_key, messages, max_tokens=500):
     print()
     return full_content.strip(), elapsed_time
 
-# ====================== 5个文件操作工具（原逻辑完全不变）======================
+# ====================== 5个文件操作工具（强制在practice03目录操作）======================
 def list_directory(path=None):
+    # 默认列出practice03目录
     path = path if path else BASE_WORK_DIR
     try:
         if not os.path.exists(path):
@@ -94,7 +95,7 @@ def list_directory(path=None):
         
         files = []
         for item in os.listdir(path):
-            item_path = os.path.join(path, item)
+            item_path  = os.path.join(path, item)
             item_stat = os.stat(item_path)
             item_type = "目录" if os.path.isdir(item_path) else "文件"
             item_size = item_stat.st_size
@@ -106,6 +107,7 @@ def list_directory(path=None):
         return f"错误：{str(e)}"
 
 def rename_file(old_name, new_name, directory=None):
+    # 默认在practice03目录
     directory = directory if directory else BASE_WORK_DIR
     try:
         old_path = os.path.join(directory, old_name)
@@ -122,6 +124,7 @@ def rename_file(old_name, new_name, directory=None):
         return f"错误：{str(e)}"
 
 def delete_file(file_name, directory=None):
+    # 默认在practice03目录
     directory = directory if directory else BASE_WORK_DIR
     try:
         file_path = os.path.join(directory, file_name)
@@ -137,6 +140,7 @@ def delete_file(file_name, directory=None):
         return f"错误：{str(e)}"
 
 def create_file(file_name, content, directory=None):
+    # 默认在practice03目录，强制真实创建
     directory = directory if directory else BASE_WORK_DIR
     try:
         if not os.path.exists(directory):
@@ -148,6 +152,7 @@ def create_file(file_name, content, directory=None):
         if os.path.exists(file_path):
             return f"错误：文件 '{file_path}' 已存在"
         
+        # 真实写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
         return f"成功：文件 '{file_name}' 已在 {directory} 创建，内容：{content}"
@@ -155,6 +160,7 @@ def create_file(file_name, content, directory=None):
         return f"错误：{str(e)}"
 
 def read_file(file_name, directory=None):
+    # 默认在practice03目录
     directory = directory if directory else BASE_WORK_DIR
     try:
         file_path = os.path.join(directory, file_name)
@@ -170,96 +176,56 @@ def read_file(file_name, directory=None):
     except Exception as e:
         return f"错误：{str(e)}"
 
-# ====================== 增强版curl工具（支持wttr.in天气直接输出）======================
-def curl(url):
-    try:
-        parsed_url = urlparse(url)
-        host = parsed_url.netloc
-        path = parsed_url.path or '/'
-        if parsed_url.query:
-            path += '?' + parsed_url.query
-
-        # 处理中文URL编码（wttr.in需要）
-        if '%' not in path:
-            path = quote(path, encoding='utf-8')
-
-        if parsed_url.scheme == 'https':
-            conn = HTTPSConnection(host, timeout=10)
-        else:
-            conn = HTTPConnection(host, timeout=10)
-
-        start_time = time.time()
-        conn.request("GET", path, headers={"User-Agent": "curl/7.68.0"})
-        response = conn.getresponse()
-
-        if response.status == 200:
-            content = response.read().decode('utf-8', errors='replace')
-            elapsed = time.time() - start_time
-            return f"状态码：{response.status}\n耗时：{elapsed:.2f}秒\n\n{content}"
-        else:
-            return f"错误：HTTP {response.status} {response.reason}"
-    except Exception as e:
-        return f"错误：{str(e)}"
-
-# ====================== 终极版指令识别（支持"XX天气如何"直接查天气）======================
+# ====================== 强化版指令识别（100%匹配中文）======================
 def parse_command(user_input):
     text = user_input.strip().lower()
-    original = user_input.strip()
-    print(f"[调试] 识别输入：{text}")
+    print(f"[调试] 识别输入：{text}")  # 调试用，可删除
 
-    # 1. 优先识别URL（直接输入https://xxx自动触发curl）
-    url_pattern = r'https?://[\w\-._~:/?#[\]@!$&\'()*+,;=.]+'
-    url_match = re.search(url_pattern, original)
-    if url_match:
-        return ("curl", url_match.group(0))
-
-    # 2. 识别"XX天气如何/XX天气怎么样"等自然问句
-    weather_question_pattern = r'([\u4e00-\u9fa5a-zA-Z0-9\s]+?)(天气|气温|温度).*?(如何|怎么样|多少|预报)'
-    weather_match = re.search(weather_question_pattern, original)
-    if weather_match:
-        city = weather_match.group(1).strip()
-        return ("curl", f"https://www.wttr.in/{city}")
-
-    # 3. 识别纯城市名查天气
-    city_pattern = r'^([\u4e00-\u9fa5a-zA-Z0-9\s]+)$'
-    city_match = re.match(city_pattern, original)
-    if city_match and not any(k in text for k in ["列出", "创建", "读取", "重命名", "删除"]):
-        city = city_match.group(1).strip()
-        return ("curl", f"https://www.wttr.in/{city}")
-
-    # 4. 列出目录
+    # 1. 列出目录（匹配所有相关关键词）
     list_keywords = ["列出", "查看", "有什么文件", "当前目录", "目录下的文件"]
     if any(k in text for k in list_keywords):
         return ("list",)
 
-    # 5. 创建文件
+    # 2. 创建文件（匹配所有相关关键词，提取文件名和内容）
     create_keywords = ["创建", "新建", "生成", "写一个", "新建文件"]
     if any(k in text for k in create_keywords):
+        # 提取文件名（匹配xxx.txt/xxx.py等）
+        import re
         file_match = re.search(r'([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
         if not file_match:
             return None
         file_name = file_match.group(1)
+
+        # 提取内容（匹配"内容是xxx" / "内容为xxx" / "写入xxx"）
+        content_patterns = [
+            r'内容[是为](.*)',
+            r'写入(.*)',
+            r'内容(.*)'
+        ]
         content = "默认内容"
-        content_patterns = [r'内容[是为](.*)', r'写入(.*)', r'内容(.*)']
         for pattern in content_patterns:
             content_match = re.search(pattern, text)
             if content_match:
                 content = content_match.group(1).strip()
                 break
+
         return ("create", file_name, content)
 
-    # 6. 读取文件
+    # 3. 读取文件
     read_keywords = ["读取", "打开", "查看内容", "读一下", "内容是什么"]
     if any(k in text for k in read_keywords):
+        import re
         file_match = re.search(r'([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
         if not file_match:
             return None
         file_name = file_match.group(1)
         return ("read", file_name)
 
-    # 7. 重命名文件
+    # 4. 重命名文件
     rename_keywords = ["重命名", "改名", "把xxx改成xxx", "重命名为"]
     if any(k in text for k in rename_keywords):
+        import re
+        # 匹配"把old.txt改成new.txt"
         file_match = re.search(r'把\s*([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)\s*(改成|重命名为|改为)\s*([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
         if not file_match:
             return None
@@ -267,26 +233,19 @@ def parse_command(user_input):
         new_name = file_match.group(3)
         return ("rename", old_name, new_name)
 
-    # 8. 删除文件
+    # 5. 删除文件
     delete_keywords = ["删除", "删掉", "移除", "删除文件"]
     if any(k in text for k in delete_keywords):
+        import re
         file_match = re.search(r'([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
         if not file_match:
             return None
         file_name = file_match.group(1)
         return ("delete", file_name)
-    
-    # 9. curl指令
-    curl_keywords = ["curl", "访问网页", "获取网页", "下载网页"]
-    if any(k in text for k in curl_keywords):
-        url_match = re.search(url_pattern, text)
-        if not url_match:
-            return None
-        return ("curl", url_match.group(0))
 
     return None
 
-# ====================== 主程序（更新提示文本）======================
+# ====================== 主程序 ======================
 def main():
     env = load_env()
     base_url = env.get('BASE_URL', 'http://127.0.0.1:1234/v1')
@@ -295,7 +254,7 @@ def main():
     max_tokens = int(env.get('MAX_TOKENS', 500))
 
     print("=" * 60)
-    print("AI 文件助手（真实操作版，支持天气/网页直接输出）")
+    print("AI 文件助手（真实操作版，文件保存在practice02目录）")
     print("=" * 60)
     print("支持指令示例：")
     print("1. 列出当前目录文件")
@@ -303,8 +262,6 @@ def main():
     print("3. 读取某个文件")
     print("4. 修改某个文件的名字")
     print("5. 删除某个目录下的某个文件")
-    print("6. curl访问网页，例如：curl https://www.example.com")
-    print("7. 查天气，例如：青城山天气如何 / 成都天气怎么样 / 青城山")
     print("=" * 60)
 
     history = [
@@ -319,9 +276,10 @@ def main():
             print("再见！")
             break
 
+        # 第一步：优先识别文件操作指令，强制执行
         cmd = parse_command(user)
         if cmd:
-            print("\n【系统】检测到操作，正在执行...")
+            print("\n【系统】检测到文件操作，正在执行...")
             res = ""
             if cmd[0] == "list":
                 res = list_directory()
@@ -333,16 +291,16 @@ def main():
                 res = rename_file(cmd[1], cmd[2])
             elif cmd[0] == "delete":
                 res = delete_file(cmd[1])
-            elif cmd[0] == "curl":
-                res = curl(cmd[1])
             else:
                 res = "错误：未知指令"
 
             print(f"【执行结果】\n{res}")
+            # 把执行结果加入对话历史
             history.append({"role":"user","content":user})
             history.append({"role":"assistant","content":res})
             continue
 
+        # 第二步：不是文件操作，走普通聊天
         history.append({"role":"user","content":user})
         print("AI：", end="", flush=True)
         ans, t = stream_llm_response(base_url, model, api_key, history, max_tokens)
