@@ -11,9 +11,10 @@ trae_projects/
 ├── practice02/          # 练习2：交互式聊天客户端
 │   ├── chat_client.py         # 支持流式输出和历史记录的聊天系统
 │   ├── tool_client.py         # 支持工具调用的客户端
-│   ├── tool_chat_client.py    # 支持工具调用和网络访问的客户端
-│   ├── file_tools.py          # 文件操作工具
-│   └── test_tools.py          # 工具测试文件
+│   └── tool_chat_client.py    # 支持工具调用和网络访问的客户端
+├── practice03/          # 练习3：对话历史压缩
+│   ├── chat_client.py         # 支持对话历史自动压缩的聊天系统
+│   └── test_chat_client.py    # 对话历史压缩功能测试
 ├── env.example         # 环境变量配置模板
 ├── .gitignore          # Git忽略文件配置
 └── README.md           # 项目说明文档
@@ -127,6 +128,44 @@ python practice02/tool_chat_client.py
 - 支持GET、POST等HTTP方法
 - 支持自定义请求头和请求数据
 
+### Practice 03: 对话历史压缩
+
+学习目标：
+- 实现对话历史长度检测
+- 掌握LLM对话总结技术
+- 学习对话上下文管理
+- 理解token使用优化策略
+
+运行方式：
+
+1. 基础聊天客户端（带对话历史压缩）：
+```bash
+python practice03/chat_client.py
+```
+
+2. 测试对话历史压缩功能：
+```bash
+python practice03/test_chat_client.py
+```
+
+功能特点：
+
+**对话历史压缩客户端 (chat_client.py)**
+- 基于practice02的聊天客户端功能
+- 自动检测对话历史长度
+- 当对话超过5轮或3000字符时触发压缩
+- 使用LLM自动总结前70%的对话内容
+- 保留最后30%的原始对话内容
+- 显示压缩状态和统计信息
+- 优化token使用，提高对话效率
+
+**核心功能实现**：
+- `calculate_context_length()`: 计算对话上下文总长度
+- `summarize_conversation()`: 调用LLM总结对话历史
+- `check_and_summarize()`: 检测并执行对话压缩逻辑
+- 智能分割：前70%压缩，后30%保留原文
+- 错误处理：LLM服务异常时的容错机制
+
 ## 技术栈
 
 - **Python 3.12+**
@@ -155,11 +194,19 @@ python practice02/tool_chat_client.py
    - 实现命令系统（如清屏、查看历史等）
    - 添加Markdown格式化输出
 
+3. **Practice 03 扩展**：
+   - 支持自定义压缩阈值和比例
+   - 添加对话历史持久化存储
+   - 实现多级压缩策略（轻度、中度、重度）
+   - 添加压缩效果统计和可视化
+   - 支持手动触发压缩命令
+
 ## 学习路径
 
 1. **入门阶段**：完成Practice 01，理解LLM API的基本调用方式
 2. **进阶阶段**：完成Practice 02，掌握流式处理和状态管理
-3. **实战阶段**：基于现有代码开发自己的AI智能体应用
+3. **优化阶段**：完成Practice 03，学习对话历史管理和token优化
+4. **实战阶段**：基于现有代码开发自己的AI智能体应用
 
 ## 常见问题
 
@@ -174,6 +221,18 @@ A: 确保你的LLM服务支持流式输出（`stream: true`参数）。
 ### Q: 如何增加对话历史的长度限制？
 
 A: 在`chat_client.py`中修改对话历史的处理逻辑，添加长度限制。
+
+### Q: 对话历史压缩是如何工作的？
+
+A: 当对话超过5轮或3000字符时，系统会自动调用LLM总结前70%的对话内容，保留最后30%的原始内容，从而优化token使用。
+
+### Q: 如何调整对话压缩的阈值？
+
+A: 在`practice03/chat_client.py`的`check_and_summarize()`函数中修改`max_rounds`（默认5轮）和`max_length`（默认3000字符）参数。
+
+### Q: 压缩后的对话会影响上下文理解吗？
+
+A: 压缩会保留关键信息的总结，但可能会丢失一些细节。系统保留了最近30%的原始对话，确保当前上下文的完整性。
 
 ## 贡献指南
 
