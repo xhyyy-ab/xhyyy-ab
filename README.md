@@ -9,7 +9,11 @@ trae_projects/
 ├── practice01/          # 练习1：基础LLM客户端
 │   └── llm_client.py   # 简单的LLM API调用和性能统计
 ├── practice02/          # 练习2：交互式聊天客户端
-│   └── chat_client.py  # 支持流式输出和历史记录的聊天系统
+│   ├── chat_client.py         # 支持流式输出和历史记录的聊天系统
+│   ├── tool_client.py         # 支持工具调用的客户端
+│   ├── tool_chat_client.py    # 支持工具调用和网络访问的客户端
+│   ├── file_tools.py          # 文件操作工具
+│   └── test_tools.py          # 工具测试文件
 ├── env.example         # 环境变量配置模板
 ├── .gitignore          # Git忽略文件配置
 └── README.md           # 项目说明文档
@@ -81,19 +85,47 @@ python practice01/llm_client.py
 - 管理对话历史记录
 - 处理用户中断和异常情况
 - 构建交互式终端界面
+- 实现工具调用功能
+- 开发网络访问能力
 
 运行方式：
+
+1. 基础聊天客户端：
 ```bash
 python practice02/chat_client.py
 ```
 
+2. 工具调用客户端：
+```bash
+python practice02/tool_client.py
+```
+
+3. 工具聊天客户端（支持网络访问）：
+```bash
+python practice02/tool_chat_client.py
+```
+
 功能特点：
+
+**基础聊天客户端 (chat_client.py)**
 - 终端界面交互式对话
 - 实时流式输出响应内容
 - 自动维护对话历史记录
 - 支持Ctrl+C中断当前响应
 - 支持quit/exit命令退出
 - 显示响应时间统计
+
+**工具调用客户端 (tool_client.py)**
+- 支持文件操作工具：列出文件、重命名文件、删除文件、创建文件、读取文件
+- 工具调用的JSON格式解析和执行
+- 工具执行结果的处理和展示
+
+**工具聊天客户端 (tool_chat_client.py)**
+- 集成所有文件操作工具
+- 新增网络访问功能（curl工具）
+- 支持通过HTTP请求访问网页并返回内容
+- 支持GET、POST等HTTP方法
+- 支持自定义请求头和请求数据
 
 ## 技术栈
 
