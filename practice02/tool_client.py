@@ -83,9 +83,9 @@ def stream_llm_response(base_url, model, api_key, messages, max_tokens=500):
     print()
     return full_content.strip(), elapsed_time
 
-# ====================== 5个文件操作工具（强制在practice03目录操作）======================
+# ====================== 5个文件操作工具（强制在practice02目录操作）======================
 def list_directory(path=None):
-    # 默认列出practice03目录
+    # 默认列出practice02目录
     path = path if path else BASE_WORK_DIR
     try:
         if not os.path.exists(path):
@@ -107,7 +107,7 @@ def list_directory(path=None):
         return f"错误：{str(e)}"
 
 def rename_file(old_name, new_name, directory=None):
-    # 默认在practice03目录
+    # 默认在practice02目录
     directory = directory if directory else BASE_WORK_DIR
     try:
         old_path = os.path.join(directory, old_name)
@@ -124,7 +124,7 @@ def rename_file(old_name, new_name, directory=None):
         return f"错误：{str(e)}"
 
 def delete_file(file_name, directory=None):
-    # 默认在practice03目录
+    # 默认在practice02目录
     directory = directory if directory else BASE_WORK_DIR
     try:
         file_path = os.path.join(directory, file_name)
@@ -140,7 +140,7 @@ def delete_file(file_name, directory=None):
         return f"错误：{str(e)}"
 
 def create_file(file_name, content, directory=None):
-    # 默认在practice03目录，强制真实创建
+    # 默认在practice02目录，强制真实创建
     directory = directory if directory else BASE_WORK_DIR
     try:
         if not os.path.exists(directory):
@@ -155,12 +155,12 @@ def create_file(file_name, content, directory=None):
         # 真实写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"成功：文件 '{file_name}' 已在 {directory} 创建，内容：{content}"
+        return f"成功：文件 '{file_name}' 已在 {directory} 创建"
     except Exception as e:
         return f"错误：{str(e)}"
 
 def read_file(file_name, directory=None):
-    # 默认在practice03目录
+    # 默认在practice02目录
     directory = directory if directory else BASE_WORK_DIR
     try:
         file_path = os.path.join(directory, file_name)

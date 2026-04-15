@@ -150,7 +150,7 @@ def create_file(file_name, content, directory=None):
         
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"成功：文件 '{file_name}' 已在 {directory} 创建，内容：{content}"
+        return f"成功：文件 '{file_name}' 已在 {directory} 创建"
     except Exception as e:
         return f"错误：{str(e)}"
 
