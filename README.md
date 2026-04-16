@@ -143,9 +143,19 @@ python practice02/tool_chat_client.py
 python practice03/chat_client.py
 ```
 
-2. 测试对话历史压缩功能：
+2. 高级聊天客户端（带关键信息提取和历史搜索）：
+```bash
+python practice03/chat_client_v2.py
+```
+
+3. 测试对话历史压缩功能：
 ```bash
 python practice03/test_chat_client.py
+```
+
+4. 测试高级功能：
+```bash
+python practice03/test_chat_client_v2.py
 ```
 
 功能特点：
@@ -165,6 +175,23 @@ python practice03/test_chat_client.py
 - `check_and_summarize()`: 检测并执行对话压缩逻辑
 - 智能分割：前70%压缩，后30%保留原文
 - 错误处理：LLM服务异常时的容错机制
+
+**高级聊天客户端 (chat_client_v2.py)**
+- 基于基础聊天客户端的所有功能
+- 每5轮对话自动提取关键信息
+- 按照5W规则（Who、What、When、Where、Why）提取关键信息
+- 将关键信息保存到本地文件 `D:\chat-log\log.txt`
+- 支持聊天历史搜索功能
+- 输入 `/search` 或表达"查找聊天历史"的意思时触发搜索
+- 结合聊天记录和用户请求进行完整的LLM查询
+
+**核心功能实现**：
+- `extract_key_information()`: 调用LLM提取关键信息
+- `save_key_information()`: 保存关键信息到本地文件
+- `check_and_extract_key_info()`: 检测并执行关键信息提取
+- `search_chat_history()`: 搜索聊天历史记录
+- `should_search_chat_history()`: 检测搜索触发条件
+- 自动创建目录和文件：确保日志文件路径存在
 
 ## 技术栈
 
