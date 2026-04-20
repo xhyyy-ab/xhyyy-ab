@@ -218,7 +218,13 @@ def parse_command(user_input):
     weather_match = re.search(weather_question_pattern, original)
     if weather_match:
         city = weather_match.group(1).strip()
-        return ("curl", f"https://www.wttr.in/{city}")
+        # 移除时间词，只保留城市名
+        time_words = ["今天", "明天", "后天", "昨天", "前天"]
+        for word in time_words:
+            city = city.replace(word, "").strip()
+        # 确保URL编码正确
+        encoded_city = quote(city, encoding='utf-8')
+        return ("curl", f"https://www.wttr.in/{encoded_city}")
 
     # 3. 识别纯城市名查天气
     city_pattern = r'^([\u4e00-\u9fa5a-zA-Z0-9\s]+)$'

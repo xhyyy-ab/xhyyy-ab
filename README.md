@@ -15,6 +15,10 @@ trae_projects/
 ├── practice03/          # 练习3：对话历史压缩
 │   ├── chat_client.py         # 支持对话历史自动压缩的聊天系统
 │   └── test_chat_client.py    # 对话历史压缩功能测试
+├── practice04/          # 练习4：AnythingLLM集成
+│   ├── chat_client.py         # 支持AnythingLLM查询的聊天系统
+│   ├── test_chat_client.py    # 对话历史压缩功能测试
+│   └── test_anythingllm.py    # AnythingLLM集成测试
 ├── env.example         # 环境变量配置模板
 ├── .gitignore          # Git忽略文件配置
 └── README.md           # 项目说明文档
@@ -192,6 +196,63 @@ python practice03/test_chat_client_v2.py
 - `search_chat_history()`: 搜索聊天历史记录
 - `should_search_chat_history()`: 检测搜索触发条件
 - 自动创建目录和文件：确保日志文件路径存在
+
+### Practice 04: AnythingLLM集成
+
+学习目标：
+- 学习使用subprocess模块调用外部命令
+- 掌握API认证和请求构建
+- 实现外部工具集成到聊天系统
+- 了解AnythingLLM的API使用方法
+
+运行方式：
+
+1. 聊天客户端（带AnythingLLM集成）：
+```bash
+python practice04/chat_client.py
+```
+
+2. 测试AnythingLLM集成功能：
+```bash
+python practice04/test_anythingllm.py
+```
+
+功能特点：
+
+**聊天客户端 (chat_client.py)**
+- 基于practice03的聊天客户端功能
+- 集成AnythingLLM文档仓库查询功能
+- 当用户提到"文档仓库"、"文件仓库"、"仓库"等关键词时自动触发查询
+- 使用subprocess模块调用curl命令访问AnythingLLM API
+- 支持API密钥认证
+- 详细的错误处理和提示
+
+**核心功能实现**：
+- `anythingllm_query()`: 使用subprocess调用curl命令访问AnythingLLM API
+- `should_use_anythingllm()`: 检测用户输入是否包含仓库相关关键词
+- 自动API密钥获取：从环境变量中读取ANYTHINGLLM_API_KEY
+- 完整的错误处理：包括网络错误、API错误和超时处理
+- 响应结果解析和展示
+
+**环境配置**：
+在`.env`文件中添加AnythingLLM API密钥：
+
+```env
+# AnythingLLM API Key
+ANYTHINGLLM_API_KEY=your_api_key_here
+```
+
+**使用方法**：
+1. 确保AnythingLLM服务正在运行（默认地址：http://localhost:3001）
+2. 在`.env`文件中配置ANYTHINGLLM_API_KEY
+3. 运行聊天客户端：`python practice04/chat_client.py`
+4. 当提到"文档仓库"、"文件仓库"、"仓库"等关键词时，系统会自动查询AnythingLLM
+5. 查看查询结果并与AI继续对话
+
+**API接口**：
+- 使用的API接口地址：http://localhost:3001/api/v1/workspace/assistant-chats/chat
+- 支持通过message字段发送查询
+- 使用API密钥进行认证
 
 ## 技术栈
 

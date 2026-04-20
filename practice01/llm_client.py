@@ -4,10 +4,9 @@ import time
 from http.client import HTTPSConnection, HTTPConnection
 from urllib.parse import urlparse
 
-# 读取.env文件（适配当前目录结构：.env和脚本在同一个practice01文件夹）
+# 读取.env文件（统一使用项目根目录下的.env文件）
 def load_env():
-    # 脚本在practice01内，.env也在practice01内，直接取当前目录
-    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
     env_vars = {}
     if os.path.exists(env_path):
         with open(env_path, 'r', encoding='utf-8') as f:
@@ -16,6 +15,7 @@ def load_env():
                 if line and not line.startswith('#'):
                     key, value = line.split('=', 1)
                     env_vars[key.strip()] = value.strip().strip('"')
+    os.environ.update(env_vars)
     return env_vars
 
 # 构建并发送请求
