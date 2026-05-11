@@ -1,359 +1,551 @@
 import os
 import json
-import time
+import http.client
+import ssl
+from urllib.parse import urlparse
 import sys
-import re
-from http.client import HTTPSConnection, HTTPConnection
-from urllib.parse import urlparse, quote
-
-# ====================== 核心配置：固定文件操作目录为practice03 ======================
-BASE_WORK_DIR = os.path.dirname(os.path.abspath(__file__))
-print(f"[系统] 文件操作目录：{BASE_WORK_DIR}")
+from datetime import datetime
 
 def load_env():
-    env_path = os.path.join(os.path.dirname(BASE_WORK_DIR), '.env')
-    env_vars = {}
-    if os.path.exists(env_path):
-        with open(env_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    key, value = line.split('=', 1)
-                    env_vars[key.strip()] = value.strip().strip('"')
-    return env_vars
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    if not os.path.exists(env_path):
+        print(f"错误：{env_path} 文件不存在，请从 env.example 复制并填写正确参数")
+        exit(1)
+    
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                key, value = line.split('=', 1)
+                os.environ[key.strip()] = value.strip()
 
-def stream_llm_response(base_url, model, api_key, messages, max_tokens=500):
+def get_tools_config():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "list_directory",
+                "description": "列出某个目录下的所有文件和子目录，包含文件基本属性和大小信息",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "dir_path": {
+                            "type": "string",
+                            "description": "要列出的目录路径"
+                        }
+                    },
+                    "required": ["dir_path"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "rename_file",
+                "description": "修改某个目录下某个文件的名字",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "dir_path": {
+                            "type": "string",
+                            "description": "文件所在的目录路径"
+                        },
+                        "old_name": {
+                            "type": "string",
+                            "description": "文件的旧名称"
+                        },
+                        "new_name": {
+                            "type": "string",
+                            "description": "文件的新名称"
+                        }
+                    },
+                    "required": ["dir_path", "old_name", "new_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_file",
+                "description": "删除某个目录下的某个文件",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "dir_path": {
+                            "type": "string",
+                            "description": "文件所在的目录路径"
+                        },
+                        "file_name": {
+                            "type": "string",
+                            "description": "要删除的文件名称"
+                        }
+                    },
+                    "required": ["dir_path", "file_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create_file",
+                "description": "在某个目录下新建一个文件并写入内容",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "dir_path": {
+                            "type": "string",
+                            "description": "要创建文件的目录路径"
+                        },
+                        "file_name": {
+                            "type": "string",
+                            "description": "要创建的文件名称"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "要写入文件的内容"
+                        }
+                    },
+                    "required": ["dir_path", "file_name", "content"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "读取某个目录下某个文件的内容",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "dir_path": {
+                            "type": "string",
+                            "description": "文件所在的目录路径"
+                        },
+                        "file_name": {
+                            "type": "string",
+                            "description": "要读取的文件名称"
+                        }
+                    },
+                    "required": ["dir_path", "file_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "curl",
+                "description": "通过HTTP/HTTPS访问网页并返回网页内容，支持使用wttr.in获取天气预报",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "要访问的网页URL地址，例如: https://wttr.in/城市名"
+                        }
+                    },
+                    "required": ["url"]
+                }
+            }
+        }
+    ]
+
+def call_llm_non_stream(messages):
+    base_url = os.getenv('BASE_URL')
+    model = os.getenv('MODEL')
+    api_key = os.getenv('API_KEY')
+    
+    if not all([base_url, model, api_key]):
+        print("错误：请在.env文件中配置BASE_URL、MODEL和API_KEY")
+        exit(1)
+    
     parsed_url = urlparse(base_url)
     host = parsed_url.netloc
-    path = parsed_url.path or '/'
-    if not path.endswith('/'):
-        path += '/'
-    path += 'chat/completions'
-
+    path = parsed_url.path.rstrip('/') + '/chat/completions'
+    protocol = parsed_url.scheme
+    
     data = {
         "model": model,
         "messages": messages,
-        "max_tokens": max_tokens,
-        "stream": True
+        "temperature": float(os.getenv('TEMPERATURE', '0.7')),
+        "max_tokens": int(os.getenv('MAX_TOKENS', '8192')),
+        "stream": False,
+        "tools": get_tools_config(),
+        "tool_choice": "auto"
     }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-
-    if parsed_url.scheme == 'https':
-        conn = HTTPSConnection(host)
+    
+    if protocol == 'https':
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        conn = http.client.HTTPSConnection(host, context=context)
     else:
-        conn = HTTPConnection(host)
-
-    conn.request("POST", path, body=json.dumps(data), headers=headers)
-    response = conn.getresponse()
-
-    full_content = ""
-    start_time = time.time()
-
+        conn = http.client.HTTPConnection(host)
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}'
+    }
+    
     try:
-        while True:
-            line = response.readline().decode('utf-8')
-            if not line:
-                break
-            line = line.strip()
-            if line.startswith('data: '):
-                data_str = line[6:]
-                if data_str == '[DONE]':
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                    if 'choices' in chunk and len(chunk['choices']) > 0:
-                        delta = chunk['choices'][0].get('delta', {})
-                        content = delta.get('content', '')
-                        if content:
-                            print(content, end='', flush=True)
-                            full_content += content
-                except:
-                    continue
-    except KeyboardInterrupt:
-        print("\n[用户中断]")
+        conn.request('POST', path, json.dumps(data), headers)
+        response = conn.getresponse()
+        
+        if response.status != 200:
+            error_data = json.loads(response.read().decode())
+            print(f"API错误: {error_data.get('error', {}).get('message', '未知错误')}")
+            return None
+        
+        response_data = json.loads(response.read().decode())
+        
+        if 'choices' in response_data and len(response_data['choices']) > 0:
+            message = response_data['choices'][0].get('message', {})
+            content = message.get('content', '')
+            tool_calls = message.get('tool_calls', None)
+            
+            return {"content": content, "tool_calls": tool_calls}
+        
+        return {"content": "", "tool_calls": None}
+    except Exception as e:
+        print(f"调用LLM时发生错误: {str(e)}")
+        return None
     finally:
         conn.close()
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print()
-    return full_content.strip(), elapsed_time
-
-# ====================== 5个文件操作工具（原逻辑完全不变）======================
-def list_directory(path=None):
-    path = path if path else BASE_WORK_DIR
+def stream_llm(messages):
+    base_url = os.getenv('BASE_URL')
+    model = os.getenv('MODEL')
+    api_key = os.getenv('API_KEY')
+    
+    if not all([base_url, model, api_key]):
+        print("错误：请在.env文件中配置BASE_URL、MODEL和API_KEY")
+        exit(1)
+    
+    parsed_url = urlparse(base_url)
+    host = parsed_url.netloc
+    path = parsed_url.path.rstrip('/') + '/chat/completions'
+    protocol = parsed_url.scheme
+    
+    data = {
+        "model": model,
+        "messages": messages,
+        "temperature": float(os.getenv('TEMPERATURE', '0.7')),
+        "max_tokens": int(os.getenv('MAX_TOKENS', '8192')),
+        "stream": True,
+        "tools": get_tools_config(),
+        "tool_choice": "auto"
+    }
+    
+    if protocol == 'https':
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        conn = http.client.HTTPSConnection(host, context=context)
+    else:
+        conn = http.client.HTTPConnection(host)
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}'
+    }
+    
     try:
-        if not os.path.exists(path):
-            return f"错误：目录 '{path}' 不存在"
-        if not os.path.isdir(path):
-            return f"错误：'{path}' 不是一个目录"
+        conn.request('POST', path, json.dumps(data), headers)
+        response = conn.getresponse()
         
-        files = []
-        for item in os.listdir(path):
-            item_path = os.path.join(path, item)
+        if response.status != 200:
+            error_data = json.loads(response.read().decode())
+            print(f"API错误: {error_data.get('error', {}).get('message', '未知错误')}")
+            return None
+        
+        full_response = ""
+        has_tool_calls = False
+        
+        for line in response:
+            line = line.decode().strip()
+            if not line:
+                continue
+            if line.startswith('data: '):
+                line = line[6:]
+                if line == '[DONE]':
+                    break
+                try:
+                    chunk = json.loads(line)
+                    if 'choices' in chunk and len(chunk['choices']) > 0:
+                        delta = chunk['choices'][0].get('delta', {})
+                        if 'content' in delta:
+                            content = delta['content']
+                            print(content, end='', flush=True)
+                            full_response += content
+                        if 'tool_calls' in delta:
+                            has_tool_calls = True
+                except json.JSONDecodeError:
+                    pass
+        print()
+        
+        if has_tool_calls:
+            result = call_llm_non_stream(messages)
+            if result:
+                return {"content": result.get("content", full_response), "tool_calls": result.get("tool_calls")}
+            return {"content": full_response, "tool_calls": None}
+        
+        return {"content": full_response, "tool_calls": None}
+    finally:
+        conn.close()
+
+def list_directory(dir_path):
+    try:
+        if not os.path.isdir(dir_path):
+            return f"错误：{dir_path} 不是有效的目录路径"
+        
+        files_info = []
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
             item_stat = os.stat(item_path)
-            item_type = "目录" if os.path.isdir(item_path) else "文件"
-            item_size = item_stat.st_size
-            item_mtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(item_stat.st_mtime))
-            files.append(f"{item_type}: {item} (大小: {item_size} 字节, 修改时间: {item_mtime})")
+            
+            if os.path.isdir(item_path):
+                item_type = "目录"
+            else:
+                item_type = "文件"
+            
+            size = item_stat.st_size
+            if size < 1024:
+                size_str = f"{size} 字节"
+            elif size < 1024 * 1024:
+                size_str = f"{size / 1024:.2f} KB"
+            else:
+                size_str = f"{size / (1024 * 1024):.2f} MB"
+            
+            modify_time = datetime.fromtimestamp(item_stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            
+            files_info.append({
+                "名称": item,
+                "类型": item_type,
+                "大小": size_str,
+                "修改时间": modify_time
+            })
         
-        return "\n".join(files)
+        return json.dumps(files_info, ensure_ascii=False, indent=2)
     except Exception as e:
-        return f"错误：{str(e)}"
+        return f"列出目录时发生错误: {str(e)}"
 
-def rename_file(old_name, new_name, directory=None):
-    directory = directory if directory else BASE_WORK_DIR
+def rename_file(dir_path, old_name, new_name):
     try:
-        old_path = os.path.join(directory, old_name)
-        new_path = os.path.join(directory, new_name)
+        old_path = os.path.join(dir_path, old_name)
+        new_path = os.path.join(dir_path, new_name)
         
         if not os.path.exists(old_path):
-            return f"错误：文件 '{old_path}' 不存在"
+            return f"错误：文件 {old_path} 不存在"
+        
         if os.path.exists(new_path):
-            return f"错误：文件 '{new_path}' 已存在"
+            return f"错误：文件 {new_path} 已存在"
         
         os.rename(old_path, new_path)
-        return f"成功：文件已重命名为 '{new_name}'"
+        return f"成功：文件已从 {old_name} 重命名为 {new_name}"
     except Exception as e:
-        return f"错误：{str(e)}"
+        return f"重命名文件时发生错误: {str(e)}"
 
-def delete_file(file_name, directory=None):
-    directory = directory if directory else BASE_WORK_DIR
+def delete_file(dir_path, file_name):
     try:
-        file_path = os.path.join(directory, file_name)
+        file_path = os.path.join(dir_path, file_name)
         
         if not os.path.exists(file_path):
-            return f"错误：文件 '{file_path}' 不存在"
-        if not os.path.isfile(file_path):
-            return f"错误：'{file_path}' 不是一个文件"
+            return f"错误：文件 {file_path} 不存在"
         
         os.remove(file_path)
-        return f"成功：文件 '{file_name}' 已删除"
+        return f"成功：文件 {file_name} 已删除"
     except Exception as e:
-        return f"错误：{str(e)}"
+        return f"删除文件时发生错误: {str(e)}"
 
-def create_file(file_name, content, directory=None):
-    directory = directory if directory else BASE_WORK_DIR
+def create_file(dir_path, file_name, content):
     try:
-        if not os.path.exists(directory):
-            return f"错误：目录 '{directory}' 不存在"
-        if not os.path.isdir(directory):
-            return f"错误：'{directory}' 不是一个目录"
+        file_path = os.path.join(dir_path, file_name)
         
-        file_path = os.path.join(directory, file_name)
         if os.path.exists(file_path):
-            return f"错误：文件 '{file_path}' 已存在"
+            return f"错误：文件 {file_path} 已存在"
         
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"成功：文件 '{file_name}' 已在 {directory} 创建"
+        
+        return f"成功：文件 {file_name} 已创建并写入内容"
     except Exception as e:
-        return f"错误：{str(e)}"
+        return f"创建文件时发生错误: {str(e)}"
 
-def read_file(file_name, directory=None):
-    directory = directory if directory else BASE_WORK_DIR
+def read_file(dir_path, file_name):
     try:
-        file_path = os.path.join(directory, file_name)
+        file_path = os.path.join(dir_path, file_name)
         
         if not os.path.exists(file_path):
-            return f"错误：文件 '{file_path}' 不存在"
+            return f"错误：文件 {file_path} 不存在"
+        
         if not os.path.isfile(file_path):
-            return f"错误：'{file_path}' 不是一个文件"
+            return f"错误：{file_path} 不是一个文件"
         
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        return f"文件 '{file_name}' 内容：\n{content}"
+        
+        return content
     except Exception as e:
-        return f"错误：{str(e)}"
+        return f"读取文件时发生错误: {str(e)}"
 
-# ====================== 增强版curl工具（支持wttr.in天气直接输出）======================
 def curl(url):
     try:
+        if not url.startswith('http://') and not url.startswith('https://'):
+            url = 'https://' + url
+        
         parsed_url = urlparse(url)
         host = parsed_url.netloc
         path = parsed_url.path or '/'
-        if parsed_url.query:
-            path += '?' + parsed_url.query
-
-        # 处理中文URL编码（wttr.in需要）
-        if '%' not in path:
-            path = quote(path, encoding='utf-8')
-
-        if parsed_url.scheme == 'https':
-            conn = HTTPSConnection(host, timeout=10)
+        
+        import urllib.parse
+        path = urllib.parse.quote(path, safe='/')
+        
+        protocol = parsed_url.scheme
+        
+        if protocol == 'https':
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            conn = http.client.HTTPSConnection(host, context=context)
         else:
-            conn = HTTPConnection(host, timeout=10)
-
-        start_time = time.time()
-        conn.request("GET", path, headers={"User-Agent": "curl/7.68.0"})
-        response = conn.getresponse()
-
-        if response.status == 200:
-            content = response.read().decode('utf-8', errors='replace')
-            elapsed = time.time() - start_time
-            return f"状态码：{response.status}\n耗时：{elapsed:.2f}秒\n\n{content}"
+            conn = http.client.HTTPConnection(host)
+        
+        if host == 'wttr.in':
+            ascii_result = ""
+            json_result = ""
+            
+            conn.request('GET', path)
+            response = conn.getresponse()
+            if response.status == 200:
+                ascii_result = response.read().decode('utf-8', errors='ignore')
+            
+            conn.close()
+            
+            json_path = path + '?format=j1'
+            conn = http.client.HTTPSConnection(host, context=context) if protocol == 'https' else http.client.HTTPConnection(host)
+            conn.request('GET', json_path)
+            response = conn.getresponse()
+            if response.status == 200:
+                json_content = response.read().decode('utf-8', errors='ignore')
+                try:
+                    data = json.loads(json_content)
+                    if 'weather' in data and len(data['weather']) > 0:
+                        today = data['weather'][0]
+                        json_result = f"\n� 详细温度信息:\n"
+                        json_result += f"�📍 {data['nearest_area'][0]['areaName'][0]['value']}\n"
+                        json_result += f"\n📅 今日 ({today['date']}):\n"
+                        json_result += f"  🌡️ 最高气温: {today['maxtempC']}°C\n"
+                        json_result += f"  🌡️ 最低气温: {today['mintempC']}°C\n"
+                        json_result += f"  🌡️ 平均气温: {today['avgtempC']}°C\n"
+                        json_result += f"  ☁️ {today['hourly'][0]['weatherDesc'][0]['value']}\n"
+                        
+                        if len(data['weather']) > 1:
+                            tomorrow = data['weather'][1]
+                            json_result += f"\n📅 明日 ({tomorrow['date']}):\n"
+                            json_result += f"  🌡️ 最高气温: {tomorrow['maxtempC']}°C\n"
+                            json_result += f"  🌡️ 最低气温: {tomorrow['mintempC']}°C\n"
+                            json_result += f"  🌡️ 平均气温: {tomorrow['avgtempC']}°C\n"
+                            json_result += f"  ☁️ {tomorrow['hourly'][0]['weatherDesc'][0]['value']}\n"
+                except json.JSONDecodeError:
+                    pass
+            
+            conn.close()
+            return ascii_result + json_result
         else:
-            return f"错误：HTTP {response.status} {response.reason}"
-    except Exception as e:
-        return f"错误：{str(e)}"
-
-# ====================== 终极版指令识别（支持"XX天气如何"直接查天气）======================
-def parse_command(user_input):
-    text = user_input.strip().lower()
-    original = user_input.strip()
-    print(f"[调试] 识别输入：{text}")
-
-    # 1. 优先识别URL（直接输入https://xxx自动触发curl）
-    url_pattern = r'https?://[\w\-._~:/?#[\]@!$&\'()*+,;=.]+'
-    url_match = re.search(url_pattern, original)
-    if url_match:
-        return ("curl", url_match.group(0))
-
-    # 2. 识别"XX天气如何/XX天气怎么样"等自然问句
-    weather_question_pattern = r'([\u4e00-\u9fa5a-zA-Z0-9\s]+?)(天气|气温|温度).*?(如何|怎么样|多少|预报)'
-    weather_match = re.search(weather_question_pattern, original)
-    if weather_match:
-        city = weather_match.group(1).strip()
-        # 移除时间词，只保留城市名
-        time_words = ["今天", "明天", "后天", "昨天", "前天"]
-        for word in time_words:
-            city = city.replace(word, "").strip()
-        # 确保URL编码正确
-        encoded_city = quote(city, encoding='utf-8')
-        return ("curl", f"https://www.wttr.in/{encoded_city}")
-
-    # 3. 识别纯城市名查天气
-    city_pattern = r'^([\u4e00-\u9fa5a-zA-Z0-9\s]+)$'
-    city_match = re.match(city_pattern, original)
-    if city_match and not any(k in text for k in ["列出", "创建", "读取", "重命名", "删除"]):
-        city = city_match.group(1).strip()
-        return ("curl", f"https://www.wttr.in/{city}")
-
-    # 4. 列出目录
-    list_keywords = ["列出", "查看", "有什么文件", "当前目录", "目录下的文件"]
-    if any(k in text for k in list_keywords):
-        return ("list",)
-
-    # 5. 创建文件
-    create_keywords = ["创建", "新建", "生成", "写一个", "新建文件"]
-    if any(k in text for k in create_keywords):
-        file_match = re.search(r'([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
-        if not file_match:
-            return None
-        file_name = file_match.group(1)
-        content = "默认内容"
-        content_patterns = [r'内容[是为](.*)', r'写入(.*)', r'内容(.*)']
-        for pattern in content_patterns:
-            content_match = re.search(pattern, text)
-            if content_match:
-                content = content_match.group(1).strip()
-                break
-        return ("create", file_name, content)
-
-    # 6. 读取文件
-    read_keywords = ["读取", "打开", "查看内容", "读一下", "内容是什么"]
-    if any(k in text for k in read_keywords):
-        file_match = re.search(r'([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
-        if not file_match:
-            return None
-        file_name = file_match.group(1)
-        return ("read", file_name)
-
-    # 7. 重命名文件
-    rename_keywords = ["重命名", "改名", "把xxx改成xxx", "重命名为"]
-    if any(k in text for k in rename_keywords):
-        file_match = re.search(r'把\s*([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)\s*(改成|重命名为|改为)\s*([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
-        if not file_match:
-            return None
-        old_name = file_match.group(1)
-        new_name = file_match.group(3)
-        return ("rename", old_name, new_name)
-
-    # 8. 删除文件
-    delete_keywords = ["删除", "删掉", "移除", "删除文件"]
-    if any(k in text for k in delete_keywords):
-        file_match = re.search(r'([a-zA-Z0-9_]+\.[a-zA-Z0-9]+)', text)
-        if not file_match:
-            return None
-        file_name = file_match.group(1)
-        return ("delete", file_name)
-    
-    # 9. curl指令
-    curl_keywords = ["curl", "访问网页", "获取网页", "下载网页"]
-    if any(k in text for k in curl_keywords):
-        url_match = re.search(url_pattern, text)
-        if not url_match:
-            return None
-        return ("curl", url_match.group(0))
-
-    return None
-
-# ====================== 主程序（更新提示文本）======================
-def main():
-    env = load_env()
-    base_url = env.get('BASE_URL', 'http://127.0.0.1:1234/v1')
-    model = env.get('MODEL', 'qwen/qwen3.5-2b')
-    api_key = env.get('API_KEY', 'sk-local-llm')
-    max_tokens = int(env.get('MAX_TOKENS', 500))
-
-    print("=" * 60)
-    print("AI 文件助手（真实操作版，支持天气/网页直接输出）")
-    print("=" * 60)
-    print("支持指令示例：")
-    print("1. 列出当前目录文件")
-    print("2. 创建一个文件，并且写入内容")
-    print("3. 读取某个文件")
-    print("4. 修改某个文件的名字")
-    print("5. 删除某个目录下的某个文件")
-    print("6. curl访问网页，例如：curl https://www.example.com")
-    print("7. 查天气，例如：青城山天气如何 / 成都天气怎么样 / 青城山")
-    print("=" * 60)
-
-    history = [
-        {"role":"system","content":"你是一个简洁的中文助手，只回答用户问题，不要多余内容。"}
-    ]
-
-    while True:
-        user = input("\n你：").strip()
-        if not user:
-            continue
-        if user.lower() in ["quit", "exit", "退出"]:
-            print("再见！")
-            break
-
-        cmd = parse_command(user)
-        if cmd:
-            print("\n【系统】检测到操作，正在执行...")
-            res = ""
-            if cmd[0] == "list":
-                res = list_directory()
-            elif cmd[0] == "create":
-                res = create_file(cmd[1], cmd[2])
-            elif cmd[0] == "read":
-                res = read_file(cmd[1])
-            elif cmd[0] == "rename":
-                res = rename_file(cmd[1], cmd[2])
-            elif cmd[0] == "delete":
-                res = delete_file(cmd[1])
-            elif cmd[0] == "curl":
-                res = curl(cmd[1])
+            conn.request('GET', path)
+            response = conn.getresponse()
+            
+            if response.status == 200:
+                content = response.read().decode('utf-8', errors='ignore')
+                return content
             else:
-                res = "错误：未知指令"
+                return f"错误：HTTP请求失败，状态码: {response.status}"
+    except Exception as e:
+        return f"访问网页时发生错误: {str(e)}"
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
 
-            print(f"【执行结果】\n{res}")
-            history.append({"role":"user","content":user})
-            history.append({"role":"assistant","content":res})
-            continue
+def execute_tool(tool_name, arguments):
+    if tool_name == "list_directory":
+        return list_directory(arguments.get("dir_path", ""))
+    elif tool_name == "rename_file":
+        return rename_file(arguments.get("dir_path", ""), arguments.get("old_name", ""), arguments.get("new_name", ""))
+    elif tool_name == "delete_file":
+        return delete_file(arguments.get("dir_path", ""), arguments.get("file_name", ""))
+    elif tool_name == "create_file":
+        return create_file(arguments.get("dir_path", ""), arguments.get("file_name", ""), arguments.get("content", ""))
+    elif tool_name == "read_file":
+        return read_file(arguments.get("dir_path", ""), arguments.get("file_name", ""))
+    elif tool_name == "curl":
+        return curl(arguments.get("url", ""))
+    else:
+        return f"未知工具: {tool_name}"
 
-        history.append({"role":"user","content":user})
-        print("AI：", end="", flush=True)
-        ans, t = stream_llm_response(base_url, model, api_key, history, max_tokens)
-        history.append({"role":"assistant","content":ans})
-        print(f"\n[耗时：{t:.2f}s]")
+def main():
+    load_env()
+    
+    chat_history = []
+    
+    print("=== LLM 工具聊天客户端（支持网络访问）===")
+    print("输入消息开始聊天，按 Ctrl+C 退出")
+    print("支持的工具：list_directory, rename_file, delete_file, create_file, read_file, curl")
+    print("使用curl工具可以访问网页，例如：https://wttr.in/城市名 获取天气预报")
+    print("==========================================\n")
+    
+    try:
+        while True:
+            user_input = input("你: ")
+            chat_history.append({"role": "user", "content": user_input})
+            
+            print("助手: ", end='', flush=True)
+            response = stream_llm(chat_history)
+            
+            if response is None:
+                print("请求失败")
+            else:
+                assistant_content = response.get("content", "")
+                tool_calls = response.get("tool_calls", None)
+                
+                if assistant_content:
+                    chat_history.append({"role": "assistant", "content": assistant_content})
+                
+                if tool_calls and isinstance(tool_calls, list):
+                    for tool_call in tool_calls:
+                        tool_name = tool_call.get('function', {}).get('name')
+                        arguments = tool_call.get('function', {}).get('arguments', {})
+                        
+                        if isinstance(arguments, str):
+                            try:
+                                arguments = json.loads(arguments)
+                            except json.JSONDecodeError:
+                                print(f"警告：无法解析工具参数: {arguments}")
+                                arguments = {}
+                        
+                        print(f"\n调用工具: {tool_name}({arguments})")
+                        tool_result = execute_tool(tool_name, arguments)
+                        print(f"工具返回: {tool_result}")
+                        
+                        chat_history.append({
+                            "role": "tool",
+                            "content": tool_result,
+                            "name": tool_name
+                        })
+                        
+                        print("助手: ", end='', flush=True)
+                        final_response = call_llm_non_stream(chat_history)
+                        
+                        if final_response is not None:
+                            final_content = final_response.get("content", "")
+                            print(final_content)
+                            if final_content:
+                                chat_history.append({"role": "assistant", "content": final_content})
+            
+            print()
+    except KeyboardInterrupt:
+        print("\n退出聊天客户端")
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

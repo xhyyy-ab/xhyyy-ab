@@ -19,6 +19,10 @@ trae_projects/
 │   ├── chat_client.py         # 支持AnythingLLM查询的聊天系统
 │   ├── test_chat_client.py    # 对话历史压缩功能测试
 │   └── test_anythingllm.py    # AnythingLLM集成测试
+├── practice05/          # 练习5：工具调用扩展
+│   └── tool_client.py         # 支持更多工具调用的客户端
+├── practice06/          # 练习6：技能系统
+│   └── tool_client.py         # 支持技能列表和技能加载的客户端
 ├── env.example         # 环境变量配置模板
 ├── .gitignore          # Git忽略文件配置
 └── README.md           # 项目说明文档
@@ -126,11 +130,12 @@ python practice02/tool_chat_client.py
 - 工具执行结果的处理和展示
 
 **工具聊天客户端 (tool_chat_client.py)**
-- 集成所有文件操作工具
+- 集成所有文件操作工具（list_directory、rename_file、delete_file、create_file、read_file）
 - 新增网络访问功能（curl工具）
-- 支持通过HTTP请求访问网页并返回内容
-- 支持GET、POST等HTTP方法
-- 支持自定义请求头和请求数据
+- 支持通过HTTP/HTTPS请求访问网页并返回内容
+- 支持使用 wttr.in 获取天气预报（格式：https://wttr.in/城市名）
+- 自动处理HTTP和HTTPS协议
+- 示例用法：输入"查看明天北京的天气"或直接使用"https://wttr.in/Beijing"
 
 ### Practice 03: 对话历史压缩
 
@@ -253,6 +258,100 @@ ANYTHINGLLM_API_KEY=your_api_key_here
 - 使用的API接口地址：http://localhost:3001/api/v1/workspace/assistant-chats/chat
 - 支持通过message字段发送查询
 - 使用API密钥进行认证
+
+### Practice 05: 工具调用扩展
+
+学习目标：
+- 掌握subprocess模块调用外部命令的方法
+- 学习AnythingLLM API的集成使用
+- 理解工具调用的扩展机制
+
+运行方式：
+
+```bash
+python practice05/tool_client.py
+```
+
+功能特点：
+- 基于practice04的聊天客户端功能
+- 新增anythingllm_query工具，支持访问AnythingLLM文档仓库
+- 使用subprocess调用curl命令访问API
+- 支持API密钥认证和环境变量配置
+
+### Practice 06: 技能系统
+
+学习目标：
+- 开发读取技能列表的function 'list_available_skills'
+- 开发加载技能正文的function 'load_skill_content'
+- 理解YAML front matter解析方法
+- 掌握技能系统的设计模式
+- 学习通过system prompt向LLM传递技能信息
+
+运行方式：
+
+```bash
+python practice06/tool_client.py
+```
+
+功能特点：
+
+**技能列表读取 (list_available_skills)**
+- 自动读取 `.agents/skills` 目录下的一级子目录
+- 解析每个子目录中的 `SKILL.md` 文件
+- 提取YAML front matter中的name和description字段
+- 返回JSON格式的技能列表
+
+**技能内容加载 (load_skill_content)**
+- 根据技能名称加载对应的SKILL.md文件
+- 提取YAML front matter之后的所有内容
+- 返回纯正文内容供LLM执行
+
+**技能系统集成**
+- 在系统启动时自动读取所有可用技能
+- 通过system prompt以JSON格式向LLM提供技能列表
+- 当LLM判断需要使用技能时，自动加载技能内容
+- 支持动态更新技能信息
+
+**技能格式规范**：
+技能文件使用YAML front matter格式：
+```markdown
+---
+name: 技能名称
+description: 技能描述
+---
+
+这里是技能的具体内容，
+LLM将根据此内容执行相应操作。
+```
+
+**核心功能实现**：
+- `list_available_skills()`: 扫描skills目录，解析SKILL.md的YAML front matter
+- `load_skill_content()`: 根据技能名加载技能正文内容
+- `get_skills_json_for_system_prompt()`: 生成技能JSON供system prompt使用
+- 自动工具调用：当检测到需要技能时，LLM自动调用list_available_skills和load_skill_content
+
+**环境配置**：
+技能目录结构：
+```
+.agents/
+└── skills/
+    └── {skill_name}/
+        └── SKILL.md
+```
+
+每个SKILL.md文件包含：
+- YAML front matter：技能名称和描述
+- 正文内容：技能的详细说明和执行规范
+
+**测试说明**：
+已创建notice技能用于测试：
+- 路径：`.agents/skills/notice/SKILL.md`
+- 功能：撰写通知时自动添加部门前缀
+- 规范：通知不能以"通知"开头，必须冠以"XX部通知"前缀
+
+测试用例：
+1. 用户未指定部门 → 输出"XX部通知"开头
+2. 用户指定"销售部" → 输出"销售部通知"开头
 
 ## 技术栈
 
