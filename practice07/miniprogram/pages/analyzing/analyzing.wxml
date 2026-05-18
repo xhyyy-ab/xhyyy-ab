@@ -1,0 +1,8 @@
+<view class="container">
+    <view class="loading-content">
+        <view class="spinner"></view>
+        <text class="loading-text">AI 分析中</text>
+        <text class="loading-tips">预计需要 3-8 秒</text>
+        <text class="loading-note">请勿关闭页面</text>
+    </view>
+</view>

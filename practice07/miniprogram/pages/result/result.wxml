@@ -1,0 +1,95 @@
+<view class="container">
+    <view class="disclaimer-section" wx:if="{{!disclaimerConfirmed}}">
+        <view class="disclaimer-header">
+            <text class="disclaimer-icon">⚠️</text>
+            <text class="disclaimer-title">医疗免责声明</text>
+        </view>
+        
+        <scroll-view 
+            class="disclaimer-content"
+            scroll-y
+            bindscrolltolower="onDisclaimerScrollBottom"
+        >
+            <text>{{result.result.disclaimer}}</text>
+        </scroll-view>
+
+        <button 
+            class="confirm-btn {{disclaimerScrolledToBottom ? '' : 'disabled'}}"
+            bindtap="onConfirmDisclaimer"
+            disabled="{{!disclaimerScrolledToBottom}}"
+        >
+            我已阅读并理解
+        </button>
+    </view>
+
+    <view class="result-section" wx:if="{{disclaimerConfirmed}}">
+        <view class="result-card">
+            <view class="result-header">
+                <text class="result-title">识别结果</text>
+                <view class="urgency-badge urgency-{{result.result.urgencyLevel}}">
+                    {{urgencyText}}
+                </view>
+            </view>
+
+            <view class="primary-result" wx:if="{{result.result.primary.confidence >= 0.5}}">
+                <text class="disease-name">{{result.result.primary.diseaseName}}</text>
+                <view class="confidence-bar">
+                    <view class="confidence-fill" style="width: {{result.result.primary.confidence * 100}}%"></view>
+                </view>
+                <text class="confidence-text">置信度: {{result.result.primary.confidence * 100}}%</text>
+            </view>
+
+            <view class="alternatives" wx:if="{{result.result.alternatives.length > 0}}">
+                <text class="alternatives-title">其他可能：</text>
+                <view class="alternative-item" wx:for="{{result.result.alternatives}}" wx:key="diseaseId">
+                    <text>{{item.diseaseName}}</text>
+                    <text class="alternative-confidence">{{item.confidence * 100}}%</text>
+                </view>
+            </view>
+
+            <view class="unknown-result" wx:if="{{result.result.primary.confidence < 0.5}}">
+                <text class="unknown-text">无法准确判断</text>
+                <text class="unknown-tips">建议尽快就医检查</text>
+            </view>
+
+            <view class="description" wx:if="{{result.result.primary.description}}">
+                <text class="description-title">简要说明</text>
+                <text class="description-text">{{result.result.primary.description}}</text>
+            </view>
+
+            <view class="suggestions">
+                <view class="suggestion-item">
+                    <text class="suggestion-icon">🏥</text>
+                    <text class="suggestion-label">建议就诊科室：</text>
+                    <text class="suggestion-value">{{result.result.primary.suggestedDepartment}}</text>
+                </view>
+                <view class="suggestion-item">
+                    <text class="suggestion-icon">⏰</text>
+                    <text class="suggestion-label">紧急程度：</text>
+                    <text class="suggestion-value">{{urgencyText}}</text>
+                </view>
+            </view>
+        </view>
+
+        <view class="related-articles" wx:if="{{result.relatedArticles.length > 0}}">
+            <text class="section-title">📖 了解更多</text>
+            <view class="article-list">
+                <view 
+                    class="article-item" 
+                    wx:for="{{result.relatedArticles}}" 
+                    wx:key="id"
+                    bindtap="onArticleTap"
+                    data-id="{{item.id}}"
+                >
+                    <image src="{{item.coverImage}}" mode="aspectFill"></image>
+                    <text class="article-title">{{item.title}}</text>
+                </view>
+            </view>
+        </view>
+
+        <view class="footer-actions">
+            <button class="action-btn secondary" bindtap="onBackHome">返回首页</button>
+            <button class="action-btn primary" bindtap="onRecheck">重新检测</button>
+        </view>
+    </view>
+</view>

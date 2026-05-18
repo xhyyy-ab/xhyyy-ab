@@ -1,0 +1,41 @@
+<view class="container">
+    <swiper class="banner" indicator-dots autoplay interval="5000" circular>
+        <swiper-item wx:for="{{banners}}" wx:key="id">
+            <image src="{{item.image}}" mode="aspectFill" bindtap="onBannerTap" data-url="{{item.link}}"></image>
+        </swiper-item>
+    </swiper>
+
+    <view class="check-section">
+        <button class="check-btn" bindtap="onStartCheck">
+            <text class="iconfont">📷</text>
+            <text>开始自查</text>
+            <text class="subtitle">拍照识别皮肤病</text>
+        </button>
+    </view>
+
+    <view class="section">
+        <view class="section-header">
+            <text class="section-title">🔥 热门科普</text>
+            <text class="section-more" bindtap="onMoreArticles">更多 ></text>
+        </view>
+        
+        <view class="article-list">
+            <view class="article-card" wx:for="{{articles}}" wx:key="id" bindtap="onArticleTap" data-id="{{item.id}}">
+                <image class="article-cover" src="{{item.coverImage}}" mode="aspectFill"></image>
+                <view class="article-info">
+                    <text class="article-title">{{item.title}}</text>
+                    <text class="article-summary">{{item.summary}}</text>
+                    <text class="article-views">阅读 {{item.views}}</text>
+                </view>
+            </view>
+        </view>
+    </view>
+
+    <view class="loading" wx:if="{{loading}}">
+        <text>加载中...</text>
+    </view>
+
+    <view class="empty-state" wx:if="{{!loading && articles.length === 0}}">
+        <text>暂无科普文章</text>
+    </view>
+</view>

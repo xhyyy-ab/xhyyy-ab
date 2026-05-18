@@ -1,0 +1,49 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/login/login",
+    "pages/camera/camera",
+    "pages/analyzing/analyzing",
+    "pages/result/result",
+    "pages/articles/articles",
+    "pages/article-detail/article-detail",
+    "pages/profile/profile",
+    "pages/history/history",
+    "pages/favorites/favorites",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#4A90E2",
+    "navigationBarTitleText": "SkinCheck",
+    "navigationBarTextStyle": "white"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#4A90E2",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "assets/icons/home.png",
+        "selectedIconPath": "assets/icons/home-active.png"
+      },
+      {
+        "pagePath": "pages/articles/articles",
+        "text": "科普",
+        "iconPath": "assets/icons/article.png",
+        "selectedIconPath": "assets/icons/article-active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,59 @@
+<view class="container">
+    <view class="guide" wx:if="{{showGuide}}">
+        <view class="guide-content">
+            <text class="guide-title">📸 拍摄建议</text>
+            <view class="guide-list">
+                <text>✓ 光线充足，避免阴影</text>
+                <text>✓ 对焦清晰，细节可见</text>
+                <text>✓ 包含周围正常皮肤</text>
+                <text>✓ 多角度拍摄更佳</text>
+            </view>
+            <button class="guide-btn" bindtap="onCloseGuide">我知道了</button>
+        </view>
+    </view>
+
+    <view class="upload-section">
+        <view class="image-list">
+            <view class="image-item" wx:for="{{images}}" wx:key="index">
+                <image src="{{item}}" mode="aspectFill"></image>
+                <view class="delete-btn" bindtap="onDeleteImage" data-index="{{index}}">×</view>
+            </view>
+            
+            <view class="add-image" wx:if="{{images.length < 3}}" bindtap="onChooseImage">
+                <text class="add-icon">+</text>
+                <text class="add-text">添加照片</text>
+                <text class="add-count">{{images.length}}/3</text>
+            </view>
+        </view>
+    </view>
+
+    <view class="body-part-section">
+        <text class="section-title">患处位置（可选）</text>
+        <view class="body-part-list">
+            <view 
+                class="body-part-item {{selectedBodyPart === item.value ? 'active' : ''}}"
+                wx:for="{{bodyParts}}"
+                wx:key="value"
+                bindtap="onSelectBodyPart"
+                data-value="{{item.value}}"
+            >
+                {{item.label}}
+            </view>
+        </view>
+    </view>
+
+    <view class="tips">
+        <text class="tips-title">⚠️ 温馨提示</text>
+        <text class="tips-text">本工具仅提供初步参考，不构成医疗诊断。如症状严重或持续，请及时就医。</text>
+    </view>
+
+    <view class="footer">
+        <button 
+            class="analyze-btn {{images.length === 0 ? 'disabled' : ''}}"
+            bindtap="onAnalyze"
+            disabled="{{images.length === 0}}"
+        >
+            开始分析
+        </button>
+    </view>
+</view>

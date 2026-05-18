@@ -1,0 +1,23 @@
+<view class="container">
+    <view class="login-header">
+        <image class="logo" src="/assets/images/logo.png" mode="aspectFit"></image>
+        <text class="title">SkinCheck</text>
+        <text class="subtitle">皮肤病智能自查工具</text>
+    </view>
+
+    <view class="login-content">
+        <text class="desc">使用微信账号快速登录，即可使用AI识别功能</text>
+        
+        <button class="login-btn" bindtap="onLogin">
+            <text class="iconfont">👤</text>
+            <text>微信一键登录</text>
+        </button>
+
+        <view class="privacy-tips">
+            <text>登录即表示同意</text>
+            <text class="link" bindtap="onPrivacyPolicy">《隐私政策》</text>
+            <text>和</text>
+            <text class="link" bindtap="onUserAgreement">《用户协议》</text>
+        </view>
+    </view>
+</view>

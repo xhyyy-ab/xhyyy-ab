@@ -163,23 +163,6 @@ def get_tools_config():
                     "required": ["user_question"]
                 }
             }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "anythingllm_query",
-                "description": "查询AnythingLLM文档仓库，获取与问题相关的文档内容。当用户提到'文档仓库'、'文件仓库'、'仓库'时自动触发。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "要查询的内容或问题"
-                        }
-                    },
-                    "required": ["message"]
-                }
-            }
         }
     ]
 
@@ -587,72 +570,6 @@ def search_chat_history(user_question):
     except Exception as e:
         return f"搜索聊天历史时发生错误: {str(e)}"
 
-def anythingllm_query(message):
-    import subprocess
-
-    api_key = os.getenv('ANYTHINGLLM_API_KEY')
-    workspace_slug = os.getenv('ANYTHINGLLM_WORKSPACE_SLUG')
-
-    if not api_key:
-        return "错误：未配置ANYTHINGLLM_API_KEY环境变量"
-    if not workspace_slug:
-        return "错误：未配置ANYTHINGLLM_WORKSPACE_SLUG环境变量"
-
-    url = "http://localhost:3001/api/v1/workspace/assistant-chats/chat"
-
-    import urllib.parse
-    encoded_message = urllib.parse.quote(message)
-
-    curl_cmd = [
-        'curl', '-X', 'POST',
-        url,
-        '-H', f'Authorization: Bearer {api_key}',
-        '-H', 'Content-Type: application/json',
-        '-d', f'{{"message": "{message}"}}',
-        '--max-time', '30'
-    ]
-
-    try:
-        result = subprocess.run(
-            curl_cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=35
-        )
-
-        if result.returncode != 0:
-            return f"错误：curl命令执行失败 (返回码: {result.returncode})\n{result.stderr}"
-
-        response_text = result.stdout.strip()
-
-        if not response_text:
-            return "错误：API返回了空响应"
-
-        try:
-            response_data = json.loads(response_text)
-
-            if isinstance(response_data, dict):
-                if response_data.get('error'):
-                    return f"API错误：{response_data.get('error')}"
-                if response_data.get('text'):
-                    return response_data.get('text')
-                if response_data.get('response'):
-                    return response_data.get('response')
-                if response_data.get('message'):
-                    return response_data.get('message')
-
-            return response_text
-
-        except json.JSONDecodeError:
-            return response_text
-
-    except subprocess.TimeoutExpired:
-        return "错误：API请求超时（超过30秒）"
-    except Exception as e:
-        return f"查询AnythingLLM时发生错误: {str(e)}"
-
 def should_search_chat_history(user_input):
     if user_input.strip().startswith('/search'):
         return True
@@ -677,8 +594,6 @@ def execute_tool(tool_name, arguments):
         return curl(arguments.get("url", ""))
     elif tool_name == "search_chat_history":
         return search_chat_history(arguments.get("user_question", ""))
-    elif tool_name == "anythingllm_query":
-        return anythingllm_query(arguments.get("message", ""))
     else:
         return f"未知工具: {tool_name}"
 
@@ -701,7 +616,7 @@ def summarize_conversation(messages_to_summarize):
     summarize_prompt = [
         {
             "role": "system",
-            "content": "你是一个对话历史总结专家。请将下面的对话历史进行精简总结，保留关键信息、用户意图、重要结论和已完成的操作。要求：1. 提取所有重要的用户需求和意图 2. 记录已确定的关键信息 3. 保留工具调用和执行结果的关键信息 4. 用简洁的语言概括每段对话的核心内容 5. 保持信息的完整性和可追溯性 6. 当用户提到'文档仓库'、'文件仓库'、'仓库'时，应使用anythingllm_query工具查询AnythingLLM"
+            "content": "你是一个对话历史总结专家。请将下面的对话历史进行精简总结，保留关键信息、用户意图、重要结论和已完成的操作。要求：1. 提取所有重要的用户需求和意图 2. 记录已确定的关键信息 3. 保留工具调用和执行结果的关键信息 4. 用简洁的语言概括每段对话的核心内容 5. 保持信息的完整性和可追溯性"
         }
     ]
 
@@ -892,15 +807,13 @@ def main():
     chat_history = []
     total_conversation_rounds = 0
 
-    print("=== LLM 工具聊天客户端（支持关键信息提取、聊天历史搜索和AnythingLLM查询）===")
+    print("=== LLM 工具聊天客户端（支持关键信息提取和聊天历史搜索）===")
     print("输入消息开始聊天，按 Ctrl+C 退出")
-    print("支持的工具：list_directory, rename_file, delete_file, create_file, read_file, curl, search_chat_history, anythingllm_query")
+    print("支持的工具：list_directory, rename_file, delete_file, create_file, read_file, curl")
     print("使用curl工具可以访问网页，例如：https://wttr.in/城市名 获取天气预报")
-    print("使用anythingllm_query可以查询文档仓库（当提到'文档仓库'、'文件仓库'、'仓库'时自动触发）")
     print("功能1：当对话超过5轮或3000字符时，自动压缩前70%的对话内容")
     print("功能2：每5轮对话自动提取关键信息（5W规则）并保存到 D:\\chat-log\\log.txt")
     print("功能3：输入 /search 或表达'查找聊天历史'时，自动搜索历史记录")
-    print("功能4：当提到'文档仓库'、'文件仓库'、'仓库'时，自动查询AnythingLLM文档")
     print("==========================================\n")
 
     try:

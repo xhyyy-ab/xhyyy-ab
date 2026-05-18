@@ -19,8 +19,104 @@ def load_env():
                 key, value = line.split('=', 1)
                 os.environ[key.strip()] = value.strip()
 
+def list_available_skills():
+    skills_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.agents', 'skills')
+    
+    if not os.path.exists(skills_dir) or not os.path.isdir(skills_dir):
+        return []
+    
+    skills = []
+    
+    for item in os.listdir(skills_dir):
+        item_path = os.path.join(skills_dir, item)
+        if os.path.isdir(item_path):
+            skill_file = os.path.join(item_path, 'SKILL.md')
+            if os.path.exists(skill_file):
+                try:
+                    with open(skill_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    if content.startswith('---'):
+                        end_index = content.find('\n---\n', 4)
+                        if end_index != -1:
+                            front_matter = content[4:end_index].strip()
+                            lines = front_matter.split('\n')
+                            skill_info = {}
+                            for line in lines:
+                                if ':' in line:
+                                    key, value = line.split(':', 1)
+                                    skill_info[key.strip()] = value.strip()
+                            
+                            if 'name' in skill_info:
+                                skills.append({
+                                    'name': skill_info['name'],
+                                    'description': skill_info.get('description', '')
+                                })
+                except Exception as e:
+                    print(f"读取技能文件 {skill_file} 时发生错误: {str(e)}")
+    
+    return skills
+
+def load_skill_content(skill_name):
+    skills_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.agents', 'skills')
+    skill_dir = os.path.join(skills_dir, skill_name)
+    
+    if not os.path.exists(skill_dir) or not os.path.isdir(skill_dir):
+        return None
+    
+    skill_file = os.path.join(skill_dir, 'SKILL.md')
+    if not os.path.exists(skill_file):
+        return None
+    
+    try:
+        with open(skill_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        if content.startswith('---'):
+            end_index = content.find('\n---\n', 4)
+            if end_index != -1:
+                return content[end_index + 5:]
+        
+        return content
+    except Exception as e:
+        print(f"加载技能内容时发生错误: {str(e)}")
+        return None
+
+def get_skills_system_prompt():
+    skills = list_available_skills()
+    if not skills:
+        return ""
+    
+    skills_json = json.dumps({"skills": skills}, ensure_ascii=False, indent=2)
+    return f"""你是一个技能调用助手。以下是可用的技能列表：
+{skills_json}
+
+当用户请求需要使用特定技能时：
+1. 先调用 load_skill_content 获取该技能的详细使用规则
+2. 获取规则后，立即按照规则执行任务并生成最终结果
+3. 不要只是确认收到规则，必须实际执行任务并输出最终结果
+4. 如果没有合适的技能，则直接回答用户问题，不需要强行调用技能
+"""
+
 def get_tools_config():
     return [
+        {
+            "type": "function",
+            "function": {
+                "name": "load_skill_content",
+                "description": "加载指定技能的详细使用规则和内容。当需要使用某个技能时调用此函数获取技能正文。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "skill_name": {
+                            "type": "string",
+                            "description": "技能名称"
+                        }
+                    },
+                    "required": ["skill_name"]
+                }
+            }
+        },
         {
             "type": "function",
             "function": {
@@ -663,7 +759,9 @@ def should_search_chat_history(user_input):
     return False
 
 def execute_tool(tool_name, arguments):
-    if tool_name == "list_directory":
+    if tool_name == "load_skill_content":
+        return load_skill_content(arguments.get("skill_name", ""))
+    elif tool_name == "list_directory":
         return list_directory(arguments.get("dir_path", ""))
     elif tool_name == "rename_file":
         return rename_file(arguments.get("dir_path", ""), arguments.get("old_name", ""), arguments.get("new_name", ""))
@@ -753,7 +851,12 @@ def check_and_summarize(chat_history):
 
     summary = summarize_conversation(messages_to_summarize)
 
+    skills_prompt = get_skills_system_prompt()
     summarized_history = [
+        {
+            "role": "system",
+            "content": skills_prompt
+        },
         {
             "role": "system",
             "content": f"【之前的对话已被压缩为以下摘要】\n{summary}\n【以上为历史对话摘要，后续对话继续】"
@@ -892,16 +995,30 @@ def main():
     chat_history = []
     total_conversation_rounds = 0
 
-    print("=== LLM 工具聊天客户端（支持关键信息提取、聊天历史搜索和AnythingLLM查询）===")
+    skills_prompt = get_skills_system_prompt()
+    
+    chat_history.append({
+        "role": "system",
+        "content": skills_prompt
+    })
+
+    print("=== LLM 技能调用聊天客户端 ===")
     print("输入消息开始聊天，按 Ctrl+C 退出")
-    print("支持的工具：list_directory, rename_file, delete_file, create_file, read_file, curl, search_chat_history, anythingllm_query")
-    print("使用curl工具可以访问网页，例如：https://wttr.in/城市名 获取天气预报")
-    print("使用anythingllm_query可以查询文档仓库（当提到'文档仓库'、'文件仓库'、'仓库'时自动触发）")
-    print("功能1：当对话超过5轮或3000字符时，自动压缩前70%的对话内容")
-    print("功能2：每5轮对话自动提取关键信息（5W规则）并保存到 D:\\chat-log\\log.txt")
-    print("功能3：输入 /search 或表达'查找聊天历史'时，自动搜索历史记录")
-    print("功能4：当提到'文档仓库'、'文件仓库'、'仓库'时，自动查询AnythingLLM文档")
+    print("支持的工具：load_skill_content, list_directory, rename_file, delete_file, create_file, read_file, curl, search_chat_history, anythingllm_query")
+    print("功能1：自动读取 .agents/skills 目录下的技能列表")
+    print("功能2：当需要使用技能时自动加载技能内容")
+    print("功能3：当对话超过5轮或3000字符时，自动压缩前70%的对话内容")
+    print("功能4：每5轮对话自动提取关键信息（5W规则）并保存到 D:\\chat-log\\log.txt")
+    print("功能5：输入 /search 或表达'查找聊天历史'时，自动搜索历史记录")
+    print("功能6：当提到'文档仓库'、'文件仓库'、'仓库'时，自动查询AnythingLLM文档")
     print("==========================================\n")
+
+    available_skills = list_available_skills()
+    if available_skills:
+        print(f"[系统] 已加载 {len(available_skills)} 个技能: {', '.join([s['name'] for s in available_skills])}")
+    else:
+        print("[系统] 未找到可用技能")
+    print()
 
     try:
         while True:
@@ -963,8 +1080,18 @@ def main():
                             "name": tool_name
                         })
 
-                        print("助手: ", end='', flush=True)
-                        final_response = call_llm_non_stream(chat_history, get_tools_config())
+                        if tool_name == "load_skill_content" and tool_result:
+                            user_original_request = chat_history[-1]['content'] if chat_history else ""
+                            follow_up_message = {
+                                "role": "user",
+                                "content": f"用户原始请求：{user_original_request}\n\n请根据上述技能规则直接生成最终的通知内容，不要回复'我了解了'或确认规则，直接输出以'XX部通知'开头的完整通知。"
+                            }
+                            follow_up_chat = chat_history + [follow_up_message]
+                            print("助手: ", end='', flush=True)
+                            final_response = call_llm_non_stream(follow_up_chat, None)
+                        else:
+                            print("助手: ", end='', flush=True)
+                            final_response = call_llm_non_stream(chat_history, get_tools_config())
 
                         if final_response is not None:
                             final_content = final_response.get("content", "")
